@@ -1,12 +1,12 @@
 """
-JetEngine Relations Helper – Streamlit (v2.3 Scraping robusto)
+JetEngine Relations Helper – Streamlit (v2.4 Scraping + Guardado en CSV)
 ===========================================================
 
-• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs (scraping robusto sin depender de clases).
+• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar y guardar las 5 primeras URLs en CSV.
 
 Requisitos:
 ```bash
-pip install streamlit beautifulsoup4 requests
+pip install streamlit beautifulsoup4 requests pandas beautifulsoup4
 ```
 """
 
@@ -15,6 +15,7 @@ import json
 import re
 from typing import List
 from urllib import error, request
+import pandas as pd
 
 import streamlit as st
 import requests
@@ -55,6 +56,10 @@ def buscar_en_google(palabra_clave: str) -> List[str]:
 
     return enlaces[:5]
 
+def guardar_urls_en_csv(urls: List[str], nombre_archivo: str = "urls_resultados.csv"):
+    df = pd.DataFrame(urls, columns=["URL"])
+    df.to_csv(nombre_archivo, index=False)
+
 # ---------------- Streamlit UI ---------------- #
 st.set_page_config(page_title="Relaciones CPT", layout="wide")
 
@@ -84,3 +89,5 @@ elif menu == "Scraping":
             st.subheader("Primeras 5 URLs encontradas:")
             for url in urls:
                 st.write(f"- {url}")
+            guardar_urls_en_csv(urls)
+            st.success("URLs guardadas en 'urls_resultados.csv'")
