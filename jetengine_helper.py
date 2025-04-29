@@ -1,9 +1,9 @@
 """
-JetEngine Relations Helper – Streamlit (v1.6)
-============================================
+JetEngine Relations Helper – Streamlit (v1.4 restaurado)
+========================================================
 
-• Mensaje verde de éxito aparece debajo del formulario.
-• Limpieza automática de campos tras acción correcta.
+• Muestra mensaje verde de éxito justo debajo del botón.
+• **NO** intenta limpiar los campos para evitar errores.
 
 Requisitos:
 ```bash
@@ -99,8 +99,6 @@ elif op == "Añadir reseñas a alojamiento":
                 "store_items_type": "update",
             }) for cid in cids)
             if ok:
-                st.session_state.parent_add = ""
-                st.session_state.childs_add = ""
                 st.success(f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}")
             else:
                 st.error("Alguna petición falló")
@@ -116,8 +114,6 @@ else:
             "context": "parent",
             "store_items_type": "update",
         }):
-            st.session_state.child_link = ""
-            st.session_state.parent_link = ""
             st.success(f"Reseña {child_id} vinculada al alojamiento {parent_id}")
         else:
             st.error("Error en la vinculación")
