@@ -1,8 +1,8 @@
 """
-JetEngine Relations Helper – Streamlit (v2.2 Scraping mejorado)
+JetEngine Relations Helper – Streamlit (v2.3 Scraping robusto)
 ===========================================================
 
-• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs (scraping actualizado).
+• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs (scraping robusto sin depender de clases).
 
 Requisitos:
 ```bash
@@ -44,10 +44,15 @@ def buscar_en_google(palabra_clave: str) -> List[str]:
     soup = BeautifulSoup(resp.text, "html.parser")
 
     enlaces = []
-    for div in soup.find_all('div', class_='tF2Cxc'):
-        a_tag = div.find('a', href=True)
-        if a_tag:
-            enlaces.append(a_tag['href'])
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        if href.startswith("/url?q="):
+            clean_url = href.split("/url?q=")[1].split("&")[0]
+            if not any(bad in clean_url for bad in ["accounts.google.com", "webcache.googleusercontent.com"]):
+                enlaces.append(clean_url)
+        elif href.startswith("http") and "google.com" not in href:
+            enlaces.append(href)
+
     return enlaces[:5]
 
 # ---------------- Streamlit UI ---------------- #
