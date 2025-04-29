@@ -1,8 +1,9 @@
 """
-JetEngine Relations Helper – Streamlit (v2 Scraping activado)
+JetEngine Relations Helper – Streamlit (v2 Scraping activado + user-agent realista)
 ===========================================================
 
-• Scraping → Introducir palabra clave → Buscar en Google los primeros 10 resultados → Extraer todos los H1 de cada URL.
+• Scraping → Introducir palabra clave → Buscar en Google España → Extraer todos los H1 de cada URL.
+• Mejora: User-Agent actualizado a Chrome 122 real.
 
 Requisitos:
 ```bash
@@ -24,7 +25,10 @@ from bs4 import BeautifulSoup
 API_BASE = "https://triptoislands.com/wp-json/jet-rel/12"
 SEP = re.compile(r"[\s,\.]+")
 HEADERS = {"Content-Type": "application/json"}
-GOOGLE_SEARCH_URL = "https://www.google.com/search"
+GOOGLE_SEARCH_URL = "https://www.google.es/search"
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/122.0.0.0 Safari/537.36")
 
 # —— Autenticación opcional —— #
 USER = st.secrets.get("wp_user", "")
@@ -59,8 +63,8 @@ def _post(payload: dict) -> bool:
     return False
 
 def buscar_en_google(palabra_clave: str) -> List[str]:
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    params = {"q": palabra_clave, "num": 10}
+    headers = {"User-Agent": USER_AGENT}
+    params = {"q": palabra_clave, "num": 10, "hl": "es", "gl": "es"}
     resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params)
     soup = BeautifulSoup(resp.text, "html.parser")
     enlaces = []
@@ -74,7 +78,7 @@ def buscar_en_google(palabra_clave: str) -> List[str]:
 
 def extraer_h1(url: str) -> List[str]:
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        headers = {"User-Agent": USER_AGENT}
         resp = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
         return [h.get_text(strip=True) for h in soup.find_all("h1")]
@@ -101,7 +105,7 @@ if menu == "Relaciones CPT":
 elif menu == "Scraping":
     st.title("🛠️ Scraping")
 
-    palabra_clave = st.text_input("Introduce una palabra clave para buscar en Google")
+    palabra_clave = st.text_input("Introduce una palabra clave para buscar en Google España")
     if st.button("Buscar y extraer H1") and palabra_clave:
         urls = buscar_en_google(palabra_clave)
         if not urls:
