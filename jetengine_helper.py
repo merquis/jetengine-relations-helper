@@ -1,5 +1,5 @@
 """
-JetEngine Relations Helper – Streamlit (v1)
+JetEngine Relations Helper – Streamlit (v1.1)
 ==========================================
 
 Web‑app interactiva construida con **Streamlit** para gestionar relaciones
@@ -127,7 +127,7 @@ elif opcion == "Añadir reseñas a alojamiento":
             })
         if ok:
             st.success("Añadidas correctamente. Resultado:")
-            st.experimental_rerun()
+            st.rerun()
 
 # --- 3) Vincular reseña suelta --- #
 else:
@@ -141,4 +141,4 @@ else:
             "store_items_type": "update",
         }):
             st.success("Reseña vinculada correctamente. Resultado:")
-            st.experimental_rerun()
+            st.rerun()
