@@ -1,9 +1,9 @@
 """
-JetEngine Relations Helper – Streamlit (v1.3)
+JetEngine Relations Helper – Streamlit (v1.4)
 ============================================
 
 • Muestra mensaje claro tras añadir o vincular reseñas.
-• Corrige el borrado seguro de campos usando `st.session_state.update()` para evitar errores de escritura.
+• Corrige el borrado de campos usando `st.rerun()` tras la acción exitosa.
 
 Requisitos:
 ```bash
@@ -100,7 +100,7 @@ elif op == "Añadir reseñas a alojamiento":
             }) for cid in cids)
             if ok:
                 st.success(f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}")
-                st.session_state.update({"parent_add": "", "childs_add": ""})
+                st.rerun()
             else:
                 st.error("Alguna petición falló")
 
@@ -116,6 +116,6 @@ else:
             "store_items_type": "update",
         }):
             st.success(f"Reseña {child_id} vinculada al alojamiento {parent_id}")
-            st.session_state.update({"child_link": "", "parent_link": ""})
+            st.rerun()
         else:
             st.error("Error en la vinculación")
