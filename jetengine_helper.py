@@ -1,9 +1,9 @@
 """
-JetEngine Relations Helper – Streamlit (v2 Scraping activado + user-agent realista)
+JetEngine Relations Helper – Streamlit (v2.1 Scraping simplificado)
 ===========================================================
 
-• Scraping → Introducir palabra clave → Buscar en Google España → Extraer todos los H1 de cada URL.
-• Mejora: User-Agent actualizado a Chrome 122 real.
+• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs.
+• Mejora: Mostrar solo URLs, sin entrar a scrapear H1.
 
 Requisitos:
 ```bash
@@ -38,30 +38,6 @@ if USER and APP:
 
 # ---------------- Utilidades ---------------- #
 
-def serializar(ids: List[str]) -> str:
-    return "a:{}:{}".format(
-        len(ids), ''.join(f'i:{i};s:{len(v)}:"{v}";' for i, v in enumerate(ids))
-    )
-
-def _get(url: str):
-    try:
-        with request.urlopen(url, timeout=10) as r:
-            if 200 <= r.status < 300:
-                return json.loads(r.read().decode())
-            st.error(f"HTTP {r.status}: {url}")
-    except Exception as e:
-        st.error(f"GET error: {e}")
-    return None
-
-def _post(payload: dict) -> bool:
-    try:
-        req = request.Request(API_BASE, data=json.dumps(payload).encode(), headers=HEADERS, method="POST")
-        with request.urlopen(req, timeout=10) as r:
-            return 200 <= r.status < 300
-    except error.URLError as e:
-        st.error(f"POST error: {e}")
-    return False
-
 def buscar_en_google(palabra_clave: str) -> List[str]:
     headers = {"User-Agent": USER_AGENT}
     params = {"q": palabra_clave, "num": 10, "hl": "es", "gl": "es"}
@@ -72,18 +48,9 @@ def buscar_en_google(palabra_clave: str) -> List[str]:
         href = g.get('href')
         if href and href.startswith("/url?q="):
             clean_url = href.split("/url?q=")[1].split("&")[0]
-            if "google.com" not in clean_url:
+            if "google.com" not in clean_url and "webcache" not in clean_url:
                 enlaces.append(clean_url)
-    return enlaces[:10]
-
-def extraer_h1(url: str) -> List[str]:
-    try:
-        headers = {"User-Agent": USER_AGENT}
-        resp = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        return [h.get_text(strip=True) for h in soup.find_all("h1")]
-    except Exception as e:
-        return [f"Error al acceder: {e}"]
+    return enlaces[:5]
 
 # ---------------- Streamlit UI ---------------- #
 st.set_page_config(page_title="Relaciones CPT", layout="wide")
@@ -106,16 +73,11 @@ elif menu == "Scraping":
     st.title("🛠️ Scraping")
 
     palabra_clave = st.text_input("Introduce una palabra clave para buscar en Google España")
-    if st.button("Buscar y extraer H1") and palabra_clave:
+    if st.button("Buscar URLs") and palabra_clave:
         urls = buscar_en_google(palabra_clave)
         if not urls:
             st.error("No se encontraron resultados o error de conexión.")
         else:
+            st.subheader("Primeras 5 URLs encontradas:")
             for url in urls:
-                st.subheader(url)
-                h1s = extraer_h1(url)
-                if h1s:
-                    for h in h1s:
-                        st.write(f"• {h}")
-                else:
-                    st.write("Sin H1 encontrados.")
+                st.write(f"- {url}")
