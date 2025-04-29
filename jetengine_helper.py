@@ -1,9 +1,8 @@
 """
-JetEngine Relations Helper – Streamlit (v2.1 Scraping simplificado)
+JetEngine Relations Helper – Streamlit (v2.2 Scraping mejorado)
 ===========================================================
 
-• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs.
-• Mejora: Mostrar solo URLs, sin entrar a scrapear H1.
+• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar solo 5 primeras URLs (scraping actualizado).
 
 Requisitos:
 ```bash
@@ -28,7 +27,7 @@ HEADERS = {"Content-Type": "application/json"}
 GOOGLE_SEARCH_URL = "https://www.google.es/search"
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
-              "Chrome/122.0.0.0 Safari/537.36")
+              "Chrome/123.0.0.0 Safari/537.36")
 
 # —— Autenticación opcional —— #
 USER = st.secrets.get("wp_user", "")
@@ -40,16 +39,15 @@ if USER and APP:
 
 def buscar_en_google(palabra_clave: str) -> List[str]:
     headers = {"User-Agent": USER_AGENT}
-    params = {"q": palabra_clave, "num": 10, "hl": "es", "gl": "es"}
+    params = {"q": palabra_clave, "hl": "es", "gl": "es", "num": 10}
     resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params)
     soup = BeautifulSoup(resp.text, "html.parser")
+
     enlaces = []
-    for g in soup.find_all('a'):
-        href = g.get('href')
-        if href and href.startswith("/url?q="):
-            clean_url = href.split("/url?q=")[1].split("&")[0]
-            if "google.com" not in clean_url and "webcache" not in clean_url:
-                enlaces.append(clean_url)
+    for div in soup.find_all('div', class_='tF2Cxc'):
+        a_tag = div.find('a', href=True)
+        if a_tag:
+            enlaces.append(a_tag['href'])
     return enlaces[:5]
 
 # ---------------- Streamlit UI ---------------- #
