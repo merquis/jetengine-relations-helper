@@ -1,3 +1,6 @@
+if __name__ == "__main__":
+    main()
+
 import streamlit as st
 import scraping_app, relations_app  # importa módulos
 
