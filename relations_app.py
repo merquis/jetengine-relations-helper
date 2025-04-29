@@ -1,35 +1,95 @@
 """
-Gestión de Relaciones CPT con JetEngine (mínimo)
+Relaciones CPT (JetEngine) – TripToIslands
+-----------------------------------------
+
+• Ver Alojamiento + sus Reseñas
+• Crear nueva Reseña y vincularla
+• Vincular una reseña existente
+
+Requisitos:
+pip install streamlit requests
 """
 
-import base64, streamlit as st, requests
+# ───────── CONFIG WP / JetEngine ────────────
+import base64, json, requests, streamlit as st
 
-API_BASE = "https://triptoislands.com/wp-json/jet-rel/12"
-HEADERS  = {"Content-Type": "application/json"}
+SITE   = "https://triptoislands.com"
+REL_ID = "12"         # ID de la relación JetEngine (padre-hijo)
+CPT_REVIEW = "review" # slug CPT reseñas
+CPT_HOTEL  = "hotel"  # slug CPT alojamiento
 
-WP_USER = st.secrets.get("wp", {}).get("user")
-WP_APP  = st.secrets.get("wp", {}).get("app_pass")
+WP_USER = st.secrets.get("wp_user")
+WP_APP  = st.secrets.get("wp_app_pass")
 
+HEADERS = {"Content-Type": "application/json"}
 if WP_USER and WP_APP:
-    token = base64.b64encode(f"{WP_USER}:{WP_APP}".encode()).decode()
-    HEADERS["Authorization"] = f"Basic {token}"
-
-def main():
-    st.set_page_config(page_title="Relaciones CPT", layout="wide")
-    st.title("🛠️ Relaciones CPT – JetEngine")
-
-    op = st.sidebar.radio(
-        "Acción",
-        ("Ver reseñas de alojamiento",
-         "Añadir reseñas a alojamiento",
-         "Vincular reseña → alojamiento")
+    HEADERS["Authorization"] = (
+        "Basic " + base64.b64encode(f"{WP_USER}:{WP_APP}".encode()).decode()
     )
 
-    st.write(f"🚧 Implementa aquí la lógica para **{op}**.")
-    if st.button("Test JetEngine"):
-        r = requests.get(API_BASE, headers=HEADERS, timeout=20)
-        st.write("Status:", r.status_code)
-        st.json(r.json() if r.ok else r.text)
+# ───────── HELPER HTTP ────────────
+def wp_get(endpoint, params=None):
+    url = f"{SITE}/wp-json/wp/v2/{endpoint}"
+    return requests.get(url, headers=HEADERS, params=params, timeout=15).json()
 
-if __name__ == "__main__":
-    main()
+def wp_post(endpoint, payload):
+    url = f"{SITE}/wp-json/wp/v2/{endpoint}"
+    r = requests.post(url, headers=HEADERS, json=payload, timeout=15)
+    return r.json()
+
+def jet_rel(parent_id, child_id):
+    url = f"{SITE}/wp-json/jet-rel/{REL_ID}"
+    body = {"parent_id": parent_id, "child_id": child_id}
+    return requests.post(url, headers=HEADERS, json=body, timeout=15).json()
+
+# ───────── STREAMLIT UI ────────────
+st.set_page_config(page_title="Relaciones CPT", layout="wide")
+st.title("🛠️ Relaciones CPT (JetEngine)")
+
+menu = st.sidebar.radio("Acción", (
+    "Ver reseñas de alojamiento",
+    "Añadir reseña + vincular",
+    "Vincular reseña existente",
+))
+
+# -------- Ver reseñas ----------
+if menu == "Ver reseñas de alojamiento":
+    hoteles = wp_get(CPT_HOTEL, {"per_page": 100})
+    hotel_map = {h["title"]["rendered"]: h["id"] for h in hoteles}
+    sel = st.selectbox("Selecciona alojamiento", list(hotel_map.keys()))
+    if sel:
+        hid = hotel_map[sel]
+        st.subheader(f"Reseñas de «{sel}»")
+        rels = wp_get(f"{CPT_REVIEW}", {"jet_related_to": hid, "per_page":100})
+        for r in rels:
+            st.write(f"- {r['title']['rendered']} (ID {r['id']})")
+
+# -------- Añadir reseña ----------
+elif menu == "Añadir reseña + vincular":
+    hoteles = wp_get(CPT_HOTEL, {"per_page": 100})
+    hotel_map = {h["title"]["rendered"]: h["id"] for h in hoteles}
+    sel = st.selectbox("Alojamiento destino", list(hotel_map.keys()))
+    title = st.text_input("Título reseña")
+    content = st.text_area("Contenido")
+    if st.button("Crear y vincular") and sel and title:
+        new = wp_post(CPT_REVIEW, {"title": title, "content": content, "status": "publish"})
+        if "id" in new:
+            res = jet_rel(hotel_map[sel], new["id"])
+            st.success(f"Reseña creada (ID {new['id']}) y vinculada.")
+        else:
+            st.error(f"Error WP: {new}")
+
+# -------- Vincular ya existente ----------
+else:
+    hoteles = wp_get(CPT_HOTEL, {"per_page": 100})
+    reviews = wp_get(CPT_REVIEW, {"per_page": 100})
+
+    hotel_map  = {h["title"]["rendered"]: h["id"] for h in hoteles}
+    review_map = {r["title"]["rendered"]: r["id"] for r in reviews}
+
+    sel_hotel  = st.selectbox("Alojamiento",  list(hotel_map.keys()))
+    sel_review = st.selectbox("Reseña", list(review_map.keys()))
+
+    if st.button("Vincular"):
+        out = jet_rel(hotel_map[sel_hotel], review_map[sel_review])
+        st.success("Vinculación creada" if "success" in json.dumps(out) else str(out))
