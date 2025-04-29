@@ -1,9 +1,9 @@
 """
-JetEngine Relations Helper – Streamlit (v1.4)
+JetEngine Relations Helper – Streamlit (v1.5)
 ============================================
 
-• Muestra mensaje claro tras añadir o vincular reseñas.
-• Corrige el borrado de campos usando `st.rerun()` tras la acción exitosa.
+• Muestra mensaje verde persistente tras añadir o vincular reseñas.
+• Limpieza segura de campos usando `st.session_state`.
 
 Requisitos:
 ```bash
@@ -60,6 +60,11 @@ def _post(payload: dict) -> bool:
 st.set_page_config(page_title="JetEngine Helper", layout="wide")
 st.title("🛠️ JetEngine Relations Helper – Streamlit")
 
+# Mostrar mensaje de éxito guardado antes
+if "mensaje_exito" in st.session_state:
+    st.success(st.session_state.mensaje_exito)
+    del st.session_state.mensaje_exito
+
 op = st.sidebar.radio("Selecciona acción", (
     "Ver reseñas de alojamiento",
     "Añadir reseñas a alojamiento",
@@ -99,7 +104,7 @@ elif op == "Añadir reseñas a alojamiento":
                 "store_items_type": "update",
             }) for cid in cids)
             if ok:
-                st.success(f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}")
+                st.session_state.mensaje_exito = f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}"
                 st.rerun()
             else:
                 st.error("Alguna petición falló")
@@ -115,7 +120,7 @@ else:
             "context": "parent",
             "store_items_type": "update",
         }):
-            st.success(f"Reseña {child_id} vinculada al alojamiento {parent_id}")
+            st.session_state.mensaje_exito = f"Reseña {child_id} vinculada al alojamiento {parent_id}"
             st.rerun()
         else:
             st.error("Error en la vinculación")
