@@ -1,144 +1,125 @@
 """
-JetEngine Relations Helper – Streamlit (v1.1)
-==========================================
+JetEngine Relations Helper – Streamlit (v1.2)
+============================================
 
-Web‑app interactiva construida con **Streamlit** para gestionar relaciones
-JetEngine entre _Alojamientos_ (parent) y _Opiniones_ (child):
-
-1. **Ver reseñas de uno o varios alojamientos**
-2. **Añadir reseñas nuevas a un alojamiento** (`context = child`)
-3. **Vincular reseña suelta → alojamiento** (`context = parent`)
+Mejoras:
+• Tras **Añadir** o **Vincular** reseñas muestra un mensaje claro:
+  “Reseñas 886, 887 añadidas al alojamiento 671”.
+• Limpia los campos de entrada mediante `st.session_state` para que queden vacíos.
 
 Requisitos
-----------
 ```bash
-pip install streamlit
+pip install streamlit>=1.25
 ```
-
-Ejecuta localmente:
-```bash
-streamlit run jetengine_helper.py
-```
-
-También puedes desplegarlo gratis en **Streamlit Cloud** o **Hugging Face Spaces**
-(ambas compañías son plataformas SaaS independientes; ninguna pertenece a la otra
-ni a OpenAI).
-
-- **Streamlit Cloud** → Propiedad de **Snowflake Inc.** (Snowflake compró Streamlit
-  en 2022).
-- **Hugging Face Spaces** → Servicio de la empresa **Hugging Face Inc.**
-
-Ambas ofrecen tiers gratuitos para apps ligeras.
 """
 
 import base64
 import json
 import re
 from typing import List
-from urllib import request, error
+from urllib import error, request
 
 import streamlit as st
 
 # ---------------- Configuración ---------------- #
 API_BASE = "https://triptoislands.com/wp-json/jet-rel/12"
-SEP_REGEX = re.compile(r"[\s,\.]+")
-
-# — Autenticación opcional (Application‑Password) —
-USER = st.secrets.get("wp_user", "")
-APP_PASS = st.secrets.get("wp_app_pass", "")
+SEP = re.compile(r"[\s,\.]+")
 HEADERS = {"Content-Type": "application/json"}
-if USER and APP_PASS:
-    token = base64.b64encode(f"{USER}:{APP_PASS}".encode()).decode()
-    HEADERS["Authorization"] = f"Basic {token}"
 
-# ---------------- Utilidades HTTP ---------------- #
+# —— Autenticación opcional —— #
+USER = st.secrets.get("wp_user", "")
+APP = st.secrets.get("wp_app_pass", "")
+if USER and APP:
+    HEADERS["Authorization"] = "Basic " + base64.b64encode(f"{USER}:{APP}".encode()).decode()
 
-def _jet_get(endpoint: str):
-    try:
-        with request.urlopen(endpoint, timeout=10) as resp:
-            if resp.status != 200:
-                st.error(f"GET {endpoint} → HTTP {resp.status}")
-                return None
-            return json.loads(resp.read().decode())
-    except Exception as exc:
-        st.error(f"GET {endpoint} → {exc}")
-        return None
-
-
-def _jet_post(payload: dict) -> bool:
-    data = json.dumps(payload).encode()
-    req = request.Request(API_BASE, data=data, headers=HEADERS, method="POST")
-    try:
-        with request.urlopen(req, timeout=10) as resp:
-            if 200 <= resp.status < 300:
-                return True
-            st.error(f"POST → HTTP {resp.status}")
-            return False
-    except Exception as exc:
-        st.error(f"POST → {exc}")
-        return False
-
+# ---------------- Utilidades ---------------- #
 
 def serializar(ids: List[str]) -> str:
-    elementos = ''.join(f'i:{i};s:{len(v)}:"{v}";' for i, v in enumerate(ids))
-    return f'a:{len(ids)}:{{{elementos}}}'
+    return "a:{}:{}".format(
+        len(ids), ''.join(f'i:{i};s:{len(v)}:"{v}";' for i, v in enumerate(ids))
+    )
 
-# ---------------- UI ---------------- #
-st.set_page_config(page_title="JetEngine Relations Helper", layout="wide")
+def _get(url: str):
+    try:
+        with request.urlopen(url, timeout=10) as r:
+            if 200 <= r.status < 300:
+                return json.loads(r.read().decode())
+            st.error(f"HTTP {r.status}: {url}")
+    except Exception as e:
+        st.error(f"GET error: {e}")
+    return None
+
+def _post(payload: dict) -> bool:
+    try:
+        req = request.Request(API_BASE, data=json.dumps(payload).encode(), headers=HEADERS, method="POST")
+        with request.urlopen(req, timeout=10) as r:
+            return 200 <= r.status < 300
+    except error.URLError as e:
+        st.error(f"POST error: {e}")
+    return False
+
+# ---------------- Streamlit UI ---------------- #
+st.set_page_config(page_title="JetEngine Helper", layout="wide")
 st.title("🛠️ JetEngine Relations Helper – Streamlit")
 
-opcion = st.sidebar.radio("Selecciona acción", (
+op = st.sidebar.radio("Selecciona acción", (
     "Ver reseñas de alojamiento",
     "Añadir reseñas a alojamiento",
     "Vincular reseña → alojamiento",
 ))
 
-# --- 1) Ver reseñas --- #
-if opcion == "Ver reseñas de alojamiento":
-    entrada = st.text_input("IDs de alojamientos (coma / espacio / punto)")
-    if st.button("Consultar") and entrada:
-        parent_ids = [x for x in SEP_REGEX.split(entrada) if x.isdigit()]
-        for pid in parent_ids:
-            st.subheader(f"Alojamiento ID {pid}")
-            data = _jet_get(f"{API_BASE}/children/{pid}")
+# --- Ver reseñas --- #
+if op == "Ver reseñas de alojamiento":
+    ids_in = st.text_input("IDs de alojamientos (coma / espacio / punto)")
+    if st.button("Consultar") and ids_in:
+        for pid in [x for x in SEP.split(ids_in) if x.isdigit()]:
+            st.subheader(f"Alojamiento {pid}")
+            data = _get(f"{API_BASE}/children/{pid}")
             if not data:
                 continue
             st.json(data)
             childs = [str(d.get("child_object_id")) for d in data if "child_object_id" in d]
             if childs:
                 st.write("**Child IDs:**", ", ".join(childs))
-                st.code(serializar(childs), language="text")
+                st.code(serializar(childs))
             else:
-                st.info("Sin child IDs válidos")
+                st.info("Sin child IDs")
 
-# --- 2) Añadir reseñas --- #
-elif opcion == "Añadir reseñas a alojamiento":
-    parent_id = st.text_input("ID de alojamiento")
-    nuevos = st.text_input("IDs de las nuevas reseñas (coma / espacio / punto)")
-    if st.button("Añadir") and parent_id.isdigit() and nuevos:
-        child_ids = [x for x in SEP_REGEX.split(nuevos) if x.isdigit()]
-        ok = True
-        for cid in child_ids:
-            ok &= _jet_post({
+# --- Añadir reseñas --- #
+elif op == "Añadir reseñas a alojamiento":
+    parent_id = st.text_input("ID de alojamiento", key="parent_add")
+    new_ids = st.text_input("IDs de nuevas reseñas", key="childs_add")
+    if st.button("Añadir") and parent_id.isdigit() and new_ids:
+        cids = [x for x in SEP.split(new_ids) if x.isdigit()]
+        if not cids:
+            st.warning("No hay IDs válidos")
+        else:
+            ok = all(_post({
                 "parent_id": int(parent_id),
                 "child_id": int(cid),
                 "context": "child",
                 "store_items_type": "update",
-            })
-        if ok:
-            st.success("Añadidas correctamente. Resultado:")
-            st.rerun()
+            }) for cid in cids)
+            if ok:
+                st.success(f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}")
+                st.session_state.parent_add = ""
+                st.session_state.childs_add = ""
+            else:
+                st.error("Alguna petición falló")
 
-# --- 3) Vincular reseña suelta --- #
+# --- Vincular reseña --- #
 else:
-    child_id = st.text_input("ID de la reseña")
-    parent_id = st.text_input("ID del alojamiento a vincular")
+    child_id = st.text_input("ID de reseña", key="child_link")
+    parent_id = st.text_input("ID de alojamiento", key="parent_link")
     if st.button("Vincular") and child_id.isdigit() and parent_id.isdigit():
-        if _jet_post({
+        if _post({
             "parent_id": int(parent_id),
             "child_id": int(child_id),
             "context": "parent",
             "store_items_type": "update",
         }):
-            st.success("Reseña vinculada correctamente. Resultado:")
-            st.rerun()
+            st.success(f"Reseña {child_id} vinculada al alojamiento {parent_id}")
+            st.session_state.child_link = ""
+            st.session_state.parent_link = ""
+        else:
+            st.error("Error en la vinculación")
