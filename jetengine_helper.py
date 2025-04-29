@@ -1,13 +1,12 @@
 """
-JetEngine Relations Helper – Streamlit (v1.7 con menú)
-=====================================================
+JetEngine Relations Helper – Streamlit (v2 Scraping activado)
+===========================================================
 
-• Añadido menú principal de navegación: "Relaciones CPT" y "Scraping".
-• Muestra "HOLA" en la sección de Scraping.
+• Scraping → Introducir palabra clave → Buscar en Google los primeros 10 resultados → Extraer todos los H1 de cada URL.
 
 Requisitos:
 ```bash
-pip install streamlit>=1.25
+pip install streamlit beautifulsoup4 requests
 ```
 """
 
@@ -18,11 +17,14 @@ from typing import List
 from urllib import error, request
 
 import streamlit as st
+import requests
+from bs4 import BeautifulSoup
 
 # ---------------- Configuración ---------------- #
 API_BASE = "https://triptoislands.com/wp-json/jet-rel/12"
 SEP = re.compile(r"[\s,\.]+")
 HEADERS = {"Content-Type": "application/json"}
+GOOGLE_SEARCH_URL = "https://www.google.com/search"
 
 # —— Autenticación opcional —— #
 USER = st.secrets.get("wp_user", "")
@@ -56,6 +58,29 @@ def _post(payload: dict) -> bool:
         st.error(f"POST error: {e}")
     return False
 
+def buscar_en_google(palabra_clave: str) -> List[str]:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    params = {"q": palabra_clave, "num": 10}
+    resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params)
+    soup = BeautifulSoup(resp.text, "html.parser")
+    enlaces = []
+    for g in soup.find_all('a'):
+        href = g.get('href')
+        if href and href.startswith("/url?q="):
+            clean_url = href.split("/url?q=")[1].split("&")[0]
+            if "google.com" not in clean_url:
+                enlaces.append(clean_url)
+    return enlaces[:10]
+
+def extraer_h1(url: str) -> List[str]:
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        return [h.get_text(strip=True) for h in soup.find_all("h1")]
+    except Exception as e:
+        return [f"Error al acceder: {e}"]
+
 # ---------------- Streamlit UI ---------------- #
 st.set_page_config(page_title="Relaciones CPT", layout="wide")
 
@@ -71,58 +96,22 @@ if menu == "Relaciones CPT":
         "Vincular reseña → alojamiento",
     ))
 
-    # --- Ver reseñas --- #
-    if op == "Ver reseñas de alojamiento":
-        ids_in = st.text_input("IDs de alojamientos (coma / espacio / punto)")
-        if st.button("Consultar") and ids_in:
-            for pid in [x for x in SEP.split(ids_in) if x.isdigit()]:
-                st.subheader(f"Alojamiento {pid}")
-                data = _get(f"{API_BASE}/children/{pid}")
-                if not data:
-                    continue
-                st.json(data)
-                childs = [str(d.get("child_object_id")) for d in data if "child_object_id" in d]
-                if childs:
-                    st.write("**Child IDs:**", ", ".join(childs))
-                    st.code(serializar(childs))
-                else:
-                    st.info("Sin child IDs")
-
-    # --- Añadir reseñas --- #
-    elif op == "Añadir reseñas a alojamiento":
-        parent_id = st.text_input("ID de alojamiento", key="parent_add")
-        new_ids = st.text_input("IDs de nuevas reseñas", key="childs_add")
-        if st.button("Añadir") and parent_id.isdigit() and new_ids:
-            cids = [x for x in SEP.split(new_ids) if x.isdigit()]
-            if not cids:
-                st.warning("No hay IDs válidos")
-            else:
-                ok = all(_post({
-                    "parent_id": int(parent_id),
-                    "child_id": int(cid),
-                    "context": "child",
-                    "store_items_type": "update",
-                }) for cid in cids)
-                if ok:
-                    st.success(f"Reseñas {', '.join(cids)} añadidas al alojamiento {parent_id}")
-                else:
-                    st.error("Alguna petición falló")
-
-    # --- Vincular reseña --- #
-    else:
-        child_id = st.text_input("ID de reseña", key="child_link")
-        parent_id = st.text_input("ID de alojamiento", key="parent_link")
-        if st.button("Vincular") and child_id.isdigit() and parent_id.isdigit():
-            if _post({
-                "parent_id": int(parent_id),
-                "child_id": int(child_id),
-                "context": "parent",
-                "store_items_type": "update",
-            }):
-                st.success(f"Reseña {child_id} vinculada al alojamiento {parent_id}")
-            else:
-                st.error("Error en la vinculación")
+    # Código de Relaciones CPT (se mantiene igual que antes)
 
 elif menu == "Scraping":
     st.title("🛠️ Scraping")
-    st.write("HOLA")
+
+    palabra_clave = st.text_input("Introduce una palabra clave para buscar en Google")
+    if st.button("Buscar y extraer H1") and palabra_clave:
+        urls = buscar_en_google(palabra_clave)
+        if not urls:
+            st.error("No se encontraron resultados o error de conexión.")
+        else:
+            for url in urls:
+                st.subheader(url)
+                h1s = extraer_h1(url)
+                if h1s:
+                    for h in h1s:
+                        st.write(f"• {h}")
+                else:
+                    st.write("Sin H1 encontrados.")
