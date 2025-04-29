@@ -1,93 +1,83 @@
 """
-JetEngine Relations Helper – Streamlit (v2.4 Scraping + Guardado en CSV)
-===========================================================
+TripToIslands • Google Scraper vía ScrapingAnt
+=============================================
 
-• Scraping → Introducir palabra clave → Buscar en Google España → Mostrar y guardar las 5 primeras URLs en CSV.
-
-Requisitos:
-```bash
-pip install streamlit beautifulsoup4 requests pandas beautifulsoup4
-```
+• Introduce una palabra clave.
+• El backend pide la SERP a Google usando ScrapingAnt (evita CAPTCHA).
+• Se muestran las 5 primeras URLs orgánicas y se guardan en urls_resultados.csv
 """
 
-import base64
-import json
-import re
-from typing import List
-from urllib import error, request
-import pandas as pd
-
-import streamlit as st
-import requests
+import os, urllib.parse, csv, pandas as pd, streamlit as st, requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 
-# ---------------- Configuración ---------------- #
-API_BASE = "https://triptoislands.com/wp-json/jet-rel/12"
-SEP = re.compile(r"[\s,\.]+")
-HEADERS = {"Content-Type": "application/json"}
-GOOGLE_SEARCH_URL = "https://www.google.es/search"
+# ── Constantes ──────────────────────────────────────────────────────
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/123.0.0.0 Safari/537.36")
+TOP_N = 5
+CSV_FILE = "urls_resultados.csv"
 
-# —— Autenticación opcional —— #
-USER = st.secrets.get("wp_user", "")
-APP = st.secrets.get("wp_app_pass", "")
-if USER and APP:
-    HEADERS["Authorization"] = "Basic " + base64.b64encode(f"{USER}:{APP}".encode()).decode()
+# ── Obtener API-Key desde secrets o variable entorno ────────────────
+SCRAPINGANT_KEY = (
+    st.secrets.get("api", {}).get("scrapingant") or
+    os.getenv("SCRAPINGANT_KEY")
+)
 
-# ---------------- Utilidades ---------------- #
+# ── Funciones utilitarias ───────────────────────────────────────────
+def build_proxy_url(target_url: str) -> str:
+    """Convierte cualquier URL en una llamada a ScrapingAnt."""
+    base = "https://api.scrapingant.com/v2/general"
+    params = {
+        "x-api-key": SCRAPINGANT_KEY,
+        "url": target_url,
+        "browser": "false",      # HTML plano: 1 crédito
+        "country": "es"
+    }
+    return f"{base}?{urllib.parse.urlencode(params)}"
 
-def buscar_en_google(palabra_clave: str) -> List[str]:
-    headers = {"User-Agent": USER_AGENT}
-    params = {"q": palabra_clave, "hl": "es", "gl": "es", "num": 10}
-    resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params)
+def buscar_en_google(keyword: str) -> list[str]:
+    """Devuelve las primeras TOP_N URLs orgánicas para la keyword."""
+    if not SCRAPINGANT_KEY:
+        st.error("⚠️ Falta SCRAPINGANT_KEY en secrets o variables de entorno.")
+        return []
+
+    query = urllib.parse.quote_plus(keyword)
+    google_url = f"https://www.google.com/search?q={query}&num={TOP_N}&hl=es"
+    proxy_url  = build_proxy_url(google_url)
+
+    resp = requests.get(proxy_url, headers={"User-Agent": USER_AGENT}, timeout=30)
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    enlaces = []
-    for a_tag in soup.find_all('a', href=True):
-        href = a_tag['href']
-        if href.startswith("/url?q="):
-            clean_url = href.split("/url?q=")[1].split("&")[0]
-            if not any(bad in clean_url for bad in ["accounts.google.com", "webcache.googleusercontent.com"]):
-                enlaces.append(clean_url)
-        elif href.startswith("http") and "google.com" not in href:
-            enlaces.append(href)
+    links = [a["href"] for a in soup.select("div.yuRUbf > a")][:TOP_N]
+    return links
 
-    return enlaces[:5]
+def guardar_urls_en_csv(urls: list[str]):
+    """Añade las URLs a un CSV con marca de tiempo."""
+    new_rows = [{"keyword_time": datetime.now().isoformat(),
+                 "url": u} for u in urls]
 
-def guardar_urls_en_csv(urls: List[str], nombre_archivo: str = "urls_resultados.csv"):
-    df = pd.DataFrame(urls, columns=["URL"])
-    df.to_csv(nombre_archivo, index=False)
+    file_exists = os.path.isfile(CSV_FILE)
+    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=new_rows[0].keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(new_rows)
 
-# ---------------- Streamlit UI ---------------- #
-st.set_page_config(page_title="Relaciones CPT", layout="wide")
+# ── INTERFAZ STREAMLIT ──────────────────────────────────────────────
+st.set_page_config(page_title="Google Scraper • TripToIslands", layout="wide")
+st.title("🔎 Scraping Google (vía ScrapingAnt)")
 
-# Menú principal
-menu = st.sidebar.selectbox("Selecciona módulo", ("Relaciones CPT", "Scraping"))
+keyword = st.text_input("Introduce una palabra clave (Google ES)")
+if st.button("Buscar") and keyword:
+    with st.spinner("Consultando Google..."):
+        urls = buscar_en_google(keyword)
 
-if menu == "Relaciones CPT":
-    st.title("🛠️ Relaciones CPT")
-
-    op = st.sidebar.radio("Selecciona acción", (
-        "Ver reseñas de alojamiento",
-        "Añadir reseñas a alojamiento",
-        "Vincular reseña → alojamiento",
-    ))
-
-    # Código de Relaciones CPT (se mantiene igual que antes)
-
-elif menu == "Scraping":
-    st.title("🛠️ Scraping")
-
-    palabra_clave = st.text_input("Introduce una palabra clave para buscar en Google España")
-    if st.button("Buscar URLs") and palabra_clave:
-        urls = buscar_en_google(palabra_clave)
-        if not urls:
-            st.error("No se encontraron resultados o error de conexión.")
-        else:
-            st.subheader("Primeras 5 URLs encontradas:")
-            for url in urls:
-                st.write(f"- {url}")
-            guardar_urls_en_csv(urls)
-            st.success("URLs guardadas en 'urls_resultados.csv'")
+    if urls:
+        st.success(f"Se encontraron {len(urls)} URLs:")
+        for u in urls:
+            st.write(f"• {u}")
+        guardar_urls_en_csv(urls)
+        st.info(f"Guardado/actualizado en {CSV_FILE}")
+    else:
+        st.warning("Google devolvió cero resultados o un bloqueo (CAPTCHA).")
